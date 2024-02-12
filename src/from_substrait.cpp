@@ -64,17 +64,13 @@ std::string SubstraitToDuckDB::RemoveExtension(std::string &function_name) {
 }
 
 SubstraitToDuckDB::SubstraitToDuckDB(Connection &con_p, const string &serialized, bool json) : con(con_p) {
-	if (con_p.context->client_data->http_state) {
-		con_p.context->client_data->http_state->Reset();
-	}
-	con_p.context->client_data->http_state = make_uniq<HTTPState>();
 	if (!json) {
 		if (!plan.ParseFromString(serialized)) {
 			throw std::runtime_error("Was not possible to convert binary into Substrait plan");
 		}
 	} else {
-		if (!google::protobuf::util::JsonStringToMessage(serialized, &plan).ok()) {
-			throw std::runtime_error("Was not possible to convert binary into Substrait plan");
+		if (auto status = google::protobuf::util::JsonStringToMessage(serialized, &plan); !status.ok()) {
+			throw std::runtime_error("Was not possible to convert JSON into Substrait plan, reason: " + status.ToString());
 		}
 	}
 
@@ -190,7 +186,7 @@ void SubstraitToDuckDB::VerifyCorrectExtractSubfield(const string &subfield) {
 }
 
 unique_ptr<ParsedExpression> SubstraitToDuckDB::TransformScalarFunctionExpr(const substrait::Expression &sexpr) {
-	auto function_name = FindFunction(sexpr.scalar_function().function_reference());
+    auto function_name = FindFunction(sexpr.scalar_function().function_reference());
 	function_name = RemoveExtension(function_name);
 	vector<unique_ptr<ParsedExpression>> children;
 	vector<string> enum_expressions;
@@ -209,6 +205,7 @@ unique_ptr<ParsedExpression> SubstraitToDuckDB::TransformScalarFunctionExpr(cons
 			enum_expressions.push_back(enum_str);
 		}
 	}
+
 	// string compare galore
 	// TODO simplify this
 	if (function_name == "and") {
@@ -256,6 +253,8 @@ unique_ptr<ParsedExpression> SubstraitToDuckDB::TransformScalarFunctionExpr(cons
 		// FIXME: ADD between to substrait extension
 		D_ASSERT(children.size() == 3);
 		return make_uniq<BetweenExpression>(std::move(children[0]), std::move(children[1]), std::move(children[2]));
+    } else if (function_name == "coalesce") {
+		return make_uniq<OperatorExpression>(ExpressionType::OPERATOR_COALESCE, std::move(children));
 	} else if (function_name == "extract") {
 		D_ASSERT(enum_expressions.size() == 1);
 		auto &subfield = enum_expressions[0];

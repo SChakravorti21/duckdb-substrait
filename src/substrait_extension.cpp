@@ -112,7 +112,7 @@ static void ToSubFunctionInternal(ClientContext &context, ToSubstraitFunctionDat
 	new_conn.context->config.use_replacement_scans = false;
 	// We want for sure to disable the internal compression optimizations
 	// These are DuckDB specific, no other system implements these
-	new_conn.Query("SET disabled_optimizers to 'compressed_materialization';");
+	new_conn.Query("SET disabled_optimizers to 'compressed_materialization,in_clause';");
 	query_plan = new_conn.context->ExtractPlan(data.query);
 	DuckDBToSubstrait transformer_d2s(context, *query_plan);
 	serialized = transformer_d2s.SerializeToString();
@@ -152,7 +152,7 @@ static void ToJsonFunctionInternal(ClientContext &context, ToSubstraitFunctionDa
 	new_conn.context->config.use_replacement_scans = false;
 	// We want for sure to disable the internal compression optimizations
 	// These are DuckDB specific, no other system implements these
-	new_conn.Query("SET disabled_optimizers to 'compressed_materialization';");
+	new_conn.Query("SET disabled_optimizers to 'compressed_materialization,in_clause';");
 	query_plan = new_conn.context->ExtractPlan(data.query);
 	DuckDBToSubstrait transformer_d2s(context, *query_plan);
 	serialized = transformer_d2s.SerializeToJson();
@@ -219,7 +219,7 @@ static void FromSubFunction(ClientContext &context, TableFunctionInput &data_p, 
 	if (!data.res) {
 		data.res = data.plan->Execute();
 	}
-	auto result_chunk = data.res->Fetch();
+    auto result_chunk = data.res->Fetch();
 	if (!result_chunk) {
 		return;
 	}

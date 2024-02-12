@@ -1,5 +1,8 @@
 #include "to_substrait.hpp"
 
+// This needs to go in duckdb/common/hive_partitioning.hpp
+#include "duckdb/common/re2_regex.hpp"
+
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -12,6 +15,7 @@
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/statistics/base_statistics.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
+#include "duckdb/planner/operator/logical_column_data_get.hpp"
 #include "duckdb/planner/operator/logical_set_operation.hpp"
 #include "google/protobuf/util/json_util.h"
 #include "substrait/algebra.pb.h"
@@ -443,6 +447,24 @@ void DuckDBToSubstrait::TransformInExpression(Expression &dexpr, substrait::Expr
 	}
 }
 
+void DuckDBToSubstrait::TransformCoalesceExpression(Expression &dexpr, substrait::Expression &sexpr,
+                                                    uint64_t col_offset) {
+	auto &dop = dynamic_cast<BoundOperatorExpression&>(dexpr);
+	auto scalar_fun = sexpr.mutable_scalar_function();
+	*scalar_fun->mutable_output_type() = DuckToSubstraitType(dop.return_type);
+
+	vector<::substrait::Type> args_types;
+	for (const auto& child_op: dop.children) {
+		args_types.emplace_back(DuckToSubstraitType(child_op->return_type));
+	}
+	scalar_fun->set_function_reference(RegisterFunction("coalesce", args_types));
+
+	for (const auto& child_op: dop.children) {
+		auto s_arg = scalar_fun->add_arguments();
+		TransformExpr(*child_op, *s_arg->mutable_value(), col_offset);
+	}
+}
+
 void DuckDBToSubstrait::TransformIsNullExpression(Expression &dexpr, substrait::Expression &sexpr,
                                                   uint64_t col_offset) {
 	auto &dop = (BoundOperatorExpression &)dexpr;
@@ -502,6 +524,9 @@ void DuckDBToSubstrait::TransformExpr(Expression &dexpr, substrait::Expression &
 	case ExpressionType::COMPARE_IN:
 		TransformInExpression(dexpr, sexpr);
 		break;
+	case ExpressionType::OPERATOR_COALESCE:
+		TransformCoalesceExpression(dexpr, sexpr, col_offset);
+        break;
 	case ExpressionType::OPERATOR_IS_NULL:
 		TransformIsNullExpression(dexpr, sexpr, col_offset);
 		break;
@@ -799,6 +824,7 @@ substrait::Rel *DuckDBToSubstrait::TransformComparisonJoin(LogicalOperator &dop)
 	auto res = new substrait::Rel();
 	auto sjoin = res->mutable_join();
 	auto &djoin = (LogicalComparisonJoin &)dop;
+
 	sjoin->set_allocated_left(TransformOp(*dop.children[0]));
 	sjoin->set_allocated_right(TransformOp(*dop.children[1]));
 
@@ -1104,7 +1130,7 @@ void DuckDBToSubstrait::TransformParquetScanToSubstrait(LogicalGet &dget, substr
 substrait::Rel *DuckDBToSubstrait::TransformGet(LogicalOperator &dop) {
 	auto get_rel = new substrait::Rel();
 	substrait::Rel *rel = get_rel;
-	auto &dget = (LogicalGet &)dop;
+	auto &dget = dynamic_cast<LogicalGet&>(dop);
 
 	if (!dget.function.get_bind_info) {
 		throw NotImplementedException("This Scanner Type can't be used in substrait because a get batch info "
@@ -1153,6 +1179,12 @@ substrait::Rel *DuckDBToSubstrait::TransformGet(LogicalOperator &dop) {
 	}
 
 	return rel;
+}
+
+substrait::Rel *DuckDBToSubstrait::TransformChunkGet(LogicalOperator &dop) {
+	auto &dget = dynamic_cast<LogicalColumnDataGet&>(dop);
+    std::cout << "Chunk: " << dget.collection->ToString() << "\n";
+    throw NotImplementedException("Still working on CHUNK_GET");
 }
 
 substrait::Rel *DuckDBToSubstrait::TransformCrossProduct(LogicalOperator &dop) {
@@ -1251,6 +1283,8 @@ substrait::Rel *DuckDBToSubstrait::TransformOp(LogicalOperator &dop) {
 		return TransformAggregateGroup(dop);
 	case LogicalOperatorType::LOGICAL_GET:
 		return TransformGet(dop);
+	case LogicalOperatorType::LOGICAL_CHUNK_GET:
+		return TransformChunkGet(dop);
 	case LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
 		return TransformCrossProduct(dop);
 	case LogicalOperatorType::LOGICAL_UNION:
@@ -1272,7 +1306,7 @@ static bool IsSetOperation(LogicalOperator &op) {
 }
 
 substrait::RelRoot *DuckDBToSubstrait::TransformRootOp(LogicalOperator &dop) {
-	auto root_rel = new substrait::RelRoot();
+    auto root_rel = new substrait::RelRoot();
 	LogicalOperator *current_op = &dop;
 	bool weird_scenario = current_op->type == LogicalOperatorType::LOGICAL_PROJECTION &&
 	                      current_op->children[0]->type == LogicalOperatorType::LOGICAL_TOP_N;

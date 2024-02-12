@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.23)
 
 # Set extension name here
 set(TARGET_NAME substrait)
@@ -103,13 +103,23 @@ set(EXTENSION_SOURCES
     ${SUBSTRAIT_SOURCES}
     ${PROTOBUF_SOURCES})
 
-add_library(${EXTENSION_NAME} STATIC ${EXTENSION_SOURCES})
+add_library( ${TARGET_NAME} STATIC ${EXTENSION_SOURCES} )
+target_link_libraries( ${TARGET_NAME} PUBLIC duckdb )
 
-set(PARAMETERS "-warnings")
-build_loadable_extension(${TARGET_NAME} ${PARAMETERS} ${EXTENSION_SOURCES})
+# Change the library name from `libsubstrait_extension.a` to `libduckdb_substrait_extension.a`
+# to avoid possible collisions.
+set_target_properties( ${TARGET_NAME} PROPERTIES OUTPUT_NAME duckdb_substrait_extension )
+
+find_package( ConfigureBbTarget REQUIRED )
+configure_bb_target( ${TARGET_NAME} V2 )
 
 install(
-  TARGETS ${EXTENSION_NAME}
+  TARGETS ${TARGET_NAME}
   EXPORT "${DUCKDB_EXPORT_SET}"
   LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
   ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
+
+install(
+  DIRECTORY ${PROJECT_SOURCE_DIR}/src/include/
+  DESTINATION include/duckdb/substrait
+  FILES_MATCHING PATTERN "*.hpp*")

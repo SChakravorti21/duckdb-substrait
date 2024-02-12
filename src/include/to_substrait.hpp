@@ -48,6 +48,7 @@ private:
 	substrait::Rel *TransformComparisonJoin(duckdb::LogicalOperator &dop);
 	substrait::Rel *TransformAggregateGroup(duckdb::LogicalOperator &dop);
 	substrait::Rel *TransformGet(duckdb::LogicalOperator &dop);
+	substrait::Rel *TransformChunkGet(duckdb::LogicalOperator &dop);
 	substrait::Rel *TransformCrossProduct(duckdb::LogicalOperator &dop);
 	substrait::Rel *TransformUnion(duckdb::LogicalOperator &dop);
 	substrait::Rel *TransformDistinct(duckdb::LogicalOperator &dop);
@@ -85,6 +86,7 @@ private:
 	void TransformConstantExpression(duckdb::Expression &dexpr, substrait::Expression &sexpr);
 	void TransformComparisonExpression(duckdb::Expression &dexpr, substrait::Expression &sexpr);
 	void TransformConjunctionExpression(duckdb::Expression &dexpr, substrait::Expression &sexpr, uint64_t col_offset);
+	void TransformCoalesceExpression(duckdb::Expression &dexpr, substrait::Expression &sexpr, uint64_t col_offset);
 	void TransformNotNullExpression(duckdb::Expression &dexpr, substrait::Expression &sexpr, uint64_t col_offset);
 	void TransformIsNullExpression(duckdb::Expression &dexpr, substrait::Expression &sexpr, uint64_t col_offset);
 	void TransformNotExpression(duckdb::Expression &dexpr, substrait::Expression &sexpr, uint64_t col_offset);
