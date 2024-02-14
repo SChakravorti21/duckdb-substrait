@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.23)
 
-# Set extension name here
-set(TARGET_NAME substrait)
+# Change the library name from `libsubstrait_extension.a` to `libduckdb_substrait_extension.a`
+# to avoid possible collisions.
+set(TARGET_NAME duckdb_substrait)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 project(${TARGET_NAME})
@@ -104,11 +105,7 @@ set(EXTENSION_SOURCES
     ${PROTOBUF_SOURCES})
 
 add_library( ${TARGET_NAME} STATIC ${EXTENSION_SOURCES} )
-target_link_libraries( ${TARGET_NAME} PUBLIC duckdb )
-
-# Change the library name from `libsubstrait_extension.a` to `libduckdb_substrait_extension.a`
-# to avoid possible collisions.
-set_target_properties( ${TARGET_NAME} PROPERTIES OUTPUT_NAME duckdb_substrait_extension )
+target_link_libraries( ${TARGET_NAME} PUBLIC duckdb_static )
 
 find_package( ConfigureBbTarget REQUIRED )
 configure_bb_target( ${TARGET_NAME} V2 )

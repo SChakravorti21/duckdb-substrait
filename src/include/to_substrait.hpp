@@ -1,5 +1,7 @@
 #pragma once
 
+#include "duckdb/function/table/arrow.hpp"
+
 #include "custom_extensions/custom_extensions.hpp"
 #include "duckdb/common/helper.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -57,6 +59,8 @@ private:
 
 	//! Methods to transform different LogicalGet Types (e.g., Table, Parquet)
 	//! To Substrait;
+	void TransformArrowScanToSubstrait(LogicalGet &dget, substrait::ReadRel *sget,
+                                       const ArrowScanFunctionData& arrow_scan_data);
 	void TransformTableScanToSubstrait(LogicalGet &dget, substrait::ReadRel *sget);
 	void TransformParquetScanToSubstrait(LogicalGet &dget, substrait::ReadRel *sget, BindInfo &bind_info,
 	                                     FunctionData &bind_data);
